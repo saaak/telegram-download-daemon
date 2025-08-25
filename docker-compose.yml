@@ -13,6 +13,13 @@ services:
       TELEGRAM_DAEMON_DEST: "/downloads"
       TELEGRAM_DAEMON_SESSION_PATH: "/session"
       #TELEGRAM_DAEMON_WORKERS: 2
+      # 代理配置 (可选)
+      TELEGRAM_DAEMON_PROXY_TYPE: ""
+      TELEGRAM_DAEMON_PROXY_ADDR: ""
+      TELEGRAM_DAEMON_PROXY_PORT: ""
+      TELEGRAM_DAEMON_PROXY_USERNAME: ""
+      TELEGRAM_DAEMON_PROXY_PASSWORD: ""
+      TELEGRAM_DAEMON_PROXY_SECRET: ""
     volumes:
        - downloads:/downloads
        - sessions:/session

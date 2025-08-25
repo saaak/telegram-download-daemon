@@ -43,6 +43,14 @@ TELEGRAM_DAEMON_TEMP_SUFFIX="tdd"
 
 TELEGRAM_DAEMON_WORKERS=getenv("TELEGRAM_DAEMON_WORKERS", multiprocessing.cpu_count())
 
+# 代理配置环境变量
+TELEGRAM_DAEMON_PROXY_TYPE=getenv("TELEGRAM_DAEMON_PROXY_TYPE", "")
+TELEGRAM_DAEMON_PROXY_ADDR=getenv("TELEGRAM_DAEMON_PROXY_ADDR", "")
+TELEGRAM_DAEMON_PROXY_PORT=getenv("TELEGRAM_DAEMON_PROXY_PORT", "")
+TELEGRAM_DAEMON_PROXY_USERNAME=getenv("TELEGRAM_DAEMON_PROXY_USERNAME", "")
+TELEGRAM_DAEMON_PROXY_PASSWORD=getenv("TELEGRAM_DAEMON_PROXY_PASSWORD", "")
+TELEGRAM_DAEMON_PROXY_SECRET=getenv("TELEGRAM_DAEMON_PROXY_SECRET", "")
+
 parser = argparse.ArgumentParser(
     description="Script to download files from a Telegram Channel.")
 parser.add_argument(
@@ -96,6 +104,49 @@ parser.add_argument(
     help=
     'number of simultaneous downloads'
 )
+parser.add_argument(
+    "--proxy-type",
+    type=str,
+    default=TELEGRAM_DAEMON_PROXY_TYPE,
+    choices=["socks5", "socks4", "http", "mtproto", ""],
+    help=
+    'Proxy type: socks5, socks4, http, or mtproto (default is TELEGRAM_DAEMON_PROXY_TYPE env var)'
+)
+parser.add_argument(
+    "--proxy-addr",
+    type=str,
+    default=TELEGRAM_DAEMON_PROXY_ADDR,
+    help=
+    'Proxy server address (default is TELEGRAM_DAEMON_PROXY_ADDR env var)'
+)
+parser.add_argument(
+    "--proxy-port",
+    type=int,
+    default=int(TELEGRAM_DAEMON_PROXY_PORT) if TELEGRAM_DAEMON_PROXY_PORT else None,
+    help=
+    'Proxy server port (default is TELEGRAM_DAEMON_PROXY_PORT env var)'
+)
+parser.add_argument(
+    "--proxy-username",
+    type=str,
+    default=TELEGRAM_DAEMON_PROXY_USERNAME,
+    help=
+    'Proxy username for authentication (default is TELEGRAM_DAEMON_PROXY_USERNAME env var)'
+)
+parser.add_argument(
+    "--proxy-password",
+    type=str,
+    default=TELEGRAM_DAEMON_PROXY_PASSWORD,
+    help=
+    'Proxy password for authentication (default is TELEGRAM_DAEMON_PROXY_PASSWORD env var)'
+)
+parser.add_argument(
+    "--proxy-secret",
+    type=str,
+    default=TELEGRAM_DAEMON_PROXY_SECRET,
+    help=
+    'MTProto proxy secret (default is TELEGRAM_DAEMON_PROXY_SECRET env var)'
+)
 args = parser.parse_args()
 
 api_id = args.api_id
@@ -110,9 +161,34 @@ lastUpdate = 0
 
 if not tempFolder:
     tempFolder = downloadFolder
-   
-# Edit these lines:
+
+# 代理配置
 proxy = None
+connection_type = None
+
+# 根据参数配置代理
+if args.proxy_type and args.proxy_addr and args.proxy_port:
+    if args.proxy_type == "mtproto":
+        # MTProto代理配置
+        from telethon import connection
+        connection_type = connection.ConnectionTcpMTProxyRandomizedIntermediate
+        proxy_secret = args.proxy_secret if args.proxy_secret else '00000000000000000000000000000000'
+        proxy = (args.proxy_addr, args.proxy_port, proxy_secret)
+        print(f"使用MTProto代理: {args.proxy_addr}:{args.proxy_port}")
+    else:
+        # SOCKS/HTTP代理配置
+        proxy = {
+            'proxy_type': args.proxy_type,
+            'addr': args.proxy_addr,
+            'port': args.proxy_port
+        }
+        if args.proxy_username:
+            proxy['username'] = args.proxy_username
+        if args.proxy_password:
+            proxy['password'] = args.proxy_password
+        print(f"使用{args.proxy_type.upper()}代理: {args.proxy_addr}:{args.proxy_port}")
+else:
+    print("未配置代理，使用直连")
 
 # End of interesting parameters
 
@@ -175,8 +251,7 @@ async def set_progress(filename, message, received, total):
         lastUpdate=currentTime
 
 
-with TelegramClient(getSession(), api_id, api_hash,
-                    proxy=proxy).start() as client:
+def main_client_code(client):
 
     saveSession(client.session)
 
@@ -296,3 +371,15 @@ with TelegramClient(getSession(), api_id, api_hash,
         await asyncio.gather(*tasks, return_exceptions=True)
 
     client.loop.run_until_complete(start())
+
+# 创建TelegramClient，根据代理类型选择连接方式
+if connection_type:
+    # MTProto代理需要特殊的连接类型
+    with TelegramClient(getSession(), api_id, api_hash,
+                        proxy=proxy, connection=connection_type).start() as client:
+        main_client_code(client)
+else:
+    # 普通代理或直连
+    with TelegramClient(getSession(), api_id, api_hash,
+                        proxy=proxy).start() as client:
+        main_client_code(client)
