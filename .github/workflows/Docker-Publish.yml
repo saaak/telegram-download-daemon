@@ -37,6 +37,7 @@ jobs:
   pushDockerHub:
     runs-on: ubuntu-latest
     name: Push to Docker Hub
+    environment: docker
     needs: [test]
     if: github.event_name == 'push'
     
